@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>CaseJog — your past cases, ranked</title>
+<style>
+  :root { --bg:#0f1420; --card:#1a2233; --ink:#e8edf6; --muted:#9aa7bd; --accent:#4f9cff; --line:#2a3550; --warn:#ffcf66; --ok:#55d6a0; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:-apple-system,Segoe UI,Roboto,sans-serif; background:var(--bg); color:var(--ink); }
+  header { padding:24px 20px 8px; max-width:860px; margin:0 auto; }
+  h1 { margin:0 0 4px; font-size:22px; }
+  .framing { color:var(--muted); font-size:14px; margin-bottom:16px; }
+  main { max-width:860px; margin:0 auto; padding:0 20px 48px; }
+  .controls { display:flex; flex-direction:column; gap:10px; background:var(--card); padding:16px; border-radius:12px; border:1px solid var(--line); }
+  textarea { width:100%; min-height:64px; resize:vertical; background:#0c1120; color:var(--ink); border:1px solid var(--line); border-radius:8px; padding:10px; font-size:15px; }
+  .row { display:flex; gap:10px; flex-wrap:wrap; }
+  select, button { background:#0c1120; color:var(--ink); border:1px solid var(--line); border-radius:8px; padding:9px 12px; font-size:14px; }
+  button { background:var(--accent); color:#05101f; border:none; font-weight:600; cursor:pointer; min-height:44px; }
+  button:hover { filter:brightness(1.07); }
+  .meta { color:var(--muted); font-size:13px; margin:14px 2px 2px; }
+  .note { color:var(--warn); font-size:12px; margin:4px 2px 6px; }
+  .summary { color:var(--ok); font-size:13px; margin:6px 2px 6px; font-weight:600; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px 16px; margin-bottom:12px; }
+  .cause { font-size:16px; font-weight:600; margin:0 0 6px; }
+  .kv { color:var(--muted); font-size:13px; margin:2px 0; }
+  .cite { color:var(--accent); font-size:12px; margin-top:8px; font-family:ui-monospace,monospace; }
+  .score { float:right; color:var(--muted); font-size:12px; text-align:right; }
+  .badge { display:inline-block; font-size:11px; font-weight:700; padding:2px 7px; border-radius:999px; margin-left:6px; vertical-align:middle; }
+  .badge.strong { background:rgba(85,214,160,0.15); color:var(--ok); border:1px solid var(--ok); }
+  .badge.weak { background:rgba(255,207,102,0.12); color:var(--warn); border:1px solid var(--warn); }
+  .empty { color:var(--muted); padding:20px 2px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>CaseJog</h1>
+  <div class="framing">Your past cases, ranked — a recall aid, not a diagnosis. 100% local.</div>
+</header>
+<main>
+  <div class="controls">
+    <textarea id="symptom" placeholder="Type a new symptom, e.g. 'drum stuck, water not draining, E18'"></textarea>
+    <div class="row">
+      <select id="appliance_type">
+        <option value="">Any appliance</option>
+        <option>washing machine</option>
+        <option>fridge</option>
+        <option>microwave</option>
+        <option>small electronics</option>
+      </select>
+      <select id="brand">
+        <option value="">Any brand</option>
+        <option>Bosch</option><option>Samsung</option><option>LG</option>
+        <option>Whirlpool</option><option>Panasonic</option><option>Sharp</option>
+        <option>Dyson</option><option>Philips</option><option>DeLonghi</option><option>Anker</option>
+      </select>
+      <button id="go">Recall past cases</button>
+    </div>
+  </div>
+  <div class="meta" id="meta"></div>
+  <div class="note" id="note"></div>
+  <div class="summary" id="summary"></div>
+  <div id="results"></div>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+async function search() {
+  const body = {
+    symptom: $("symptom").value.trim(),
+    appliance_type: $("appliance_type").value || null,
+    brand: $("brand").value || null,
+    k: 5,
+  };
+  if (!body.symptom) { $("meta").textContent = "Type a symptom first."; return; }
+  $("meta").textContent = "Searching…";
+  $("note").textContent = ""; $("summary").textContent = "";
+  const r = await fetch("/api/search", {
+    method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(body)
+  });
+  const data = await r.json();
+  $("meta").textContent = `${data.framing}  ·  engine: ${data.engine}  ·  ${data.latency_ms} ms  ·  ${data.count} cases`;
+  $("note").textContent = data.note || "";
+  // optional Decider summary ("N strong matches") when the confidence gate is on
+  const strong = data.results.filter(c => c.confidence === "strong").length;
+  if (data.results.some(c => c.confidence)) {
+    $("summary").textContent = `${strong} strong match${strong===1?"":"es"} of ${data.results.length}`;
+  }
+  const el = $("results"); el.innerHTML = "";
+  if (!data.results.length) { el.innerHTML = '<div class="empty">No matching past cases.</div>'; return; }
+  for (const c of data.results) {
+    const parts = (c.parts||[]).join(", ") || "—";
+    const score = (c.score!==undefined?c.score:c._score);
+    let badge = "";
+    if (c.confidence === "strong") badge = '<span class="badge strong">strong</span>';
+    else if (c.confidence === "weak") badge = '<span class="badge weak">weak</span>';
+    const conf = (c.confidence_score!==undefined && c.confidence_score!==null)
+      ? `<br><span style="font-size:11px">conf ${Number(c.confidence_score).toFixed(2)}</span>` : "";
+    el.insertAdjacentHTML("beforeend", `
+      <div class="card">
+        <span class="score">match ${Number(score).toFixed(3)}${conf}</span>
+        <p class="cause">${c.root_cause}${badge}</p>
+        <div class="kv">${c.appliance_type||""} · ${c.brand||""} ${c.model||""} · code ${c.error_code||"—"}</div>
+        <div class="kv">symptom on file: ${c.symptom_text||""}</div>
+        <div class="kv">parts: ${parts} · labor: ${c.labor_minutes||"—"} min · price: $${c.price||"—"}</div>
+        <div class="cite">source case ${c.citation?c.citation.id:c.id} · ${c.date||""} · $${c.citation?c.citation.price:c.price}</div>
+      </div>`);
+  }
+}
+$("go").addEventListener("click", search);
+$("symptom").addEventListener("keydown", (e)=>{ if(e.key==="Enter"&&(e.metaKey||e.ctrlKey)) search(); });
+</script>
+</body>
+</html>

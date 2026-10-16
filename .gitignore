@@ -1,0 +1,17 @@
+# runtime / env
+.venv/
+__pycache__/
+*.pyc
+.env
+# generated data (regenerate with gen_corpus.py)
+data/
+# planning + submission docs (NOT part of the public code repo)
+devSubmission.md
+NOTES.md
+SPEC.md
+PLAN.md
+PROGRESS.md
+BUILD_README.md
+review*.md
+review*.json
+phase4-comparison.md
