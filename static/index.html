@@ -3,67 +3,622 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>CaseJog — your past cases, ranked</title>
+<title>CaseJog — repair-bench case recall</title>
 <style>
-  :root { --bg:#0f1420; --card:#1a2233; --ink:#e8edf6; --muted:#9aa7bd; --accent:#4f9cff; --line:#2a3550; --warn:#ffcf66; --ok:#55d6a0; }
-  * { box-sizing:border-box; }
-  body { margin:0; font-family:-apple-system,Segoe UI,Roboto,sans-serif; background:var(--bg); color:var(--ink); }
-  header { padding:24px 20px 8px; max-width:860px; margin:0 auto; }
-  h1 { margin:0 0 4px; font-size:22px; }
-  .framing { color:var(--muted); font-size:14px; margin-bottom:16px; }
-  main { max-width:860px; margin:0 auto; padding:0 20px 48px; }
-  .controls { display:flex; flex-direction:column; gap:10px; background:var(--card); padding:16px; border-radius:12px; border:1px solid var(--line); }
-  textarea { width:100%; min-height:64px; resize:vertical; background:#0c1120; color:var(--ink); border:1px solid var(--line); border-radius:8px; padding:10px; font-size:15px; }
-  .row { display:flex; gap:10px; flex-wrap:wrap; }
-  select, button { background:#0c1120; color:var(--ink); border:1px solid var(--line); border-radius:8px; padding:9px 12px; font-size:14px; }
-  button { background:var(--accent); color:#05101f; border:none; font-weight:600; cursor:pointer; min-height:44px; }
-  button:hover { filter:brightness(1.07); }
-  .meta { color:var(--muted); font-size:13px; margin:14px 2px 2px; }
-  .note { color:var(--warn); font-size:12px; margin:4px 2px 6px; }
-  .summary { color:var(--ok); font-size:13px; margin:6px 2px 6px; font-weight:600; }
-  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px 16px; margin-bottom:12px; }
-  .cause { font-size:16px; font-weight:600; margin:0 0 6px; }
-  .kv { color:var(--muted); font-size:13px; margin:2px 0; }
-  .cite { color:var(--accent); font-size:12px; margin-top:8px; font-family:ui-monospace,monospace; }
-  .score { float:right; color:var(--muted); font-size:12px; text-align:right; }
-  .badge { display:inline-block; font-size:11px; font-weight:700; padding:2px 7px; border-radius:999px; margin-left:6px; vertical-align:middle; }
-  .badge.strong { background:rgba(85,214,160,0.15); color:var(--ok); border:1px solid var(--ok); }
-  .badge.weak { background:rgba(255,207,102,0.12); color:var(--warn); border:1px solid var(--warn); }
-  .empty { color:var(--muted); padding:20px 2px; }
+  /* ===== Dovetail design system — self-contained, offline-safe ===== */
+  /* Self-hosted fonts served from the FastAPI static mount (/static/fonts). */
+  @font-face {
+    font-family: 'Inter'; font-style: normal; font-weight: 400; font-display: swap;
+    src: url('/static/fonts/inter-400.woff2') format('woff2');
+  }
+  @font-face {
+    font-family: 'Inter'; font-style: normal; font-weight: 500; font-display: swap;
+    src: url('/static/fonts/inter-500.woff2') format('woff2');
+  }
+  @font-face {
+    font-family: 'Inter'; font-style: normal; font-weight: 600; font-display: swap;
+    src: url('/static/fonts/inter-600.woff2') format('woff2');
+  }
+  @font-face {
+    font-family: 'JetBrains Mono'; font-style: normal; font-weight: 400; font-display: swap;
+    src: url('/static/fonts/JetBrainsMono-Regular.woff2') format('woff2');
+  }
+
+  :root {
+    /* Colors — dark command center, single accent */
+    --page-ink: #0a0a0a;
+    --deep-coal: #141414;
+    --card-carbon: #1e1e1e;
+    --steel-border: #313131;
+    --graphite: #454545;
+    --fog: #7c7c7c;
+    --ash: #a7a7a7;
+    --snow: #ffffff;
+    --cornflower: #6798ff;      /* ACCENT ONLY — strokes/active/data-highlight, never a button fill */
+
+    /* Type */
+    --font-ui: 'Inter', ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+    /* Spacing scale */
+    --s-1: 8px; --s-2: 16px; --s-3: 24px; --s-4: 32px; --s-5: 40px; --s-6: 64px; --s-7: 96px;
+  }
+
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    font-family: var(--font-ui);
+    font-weight: 400;
+    font-size: 16px;
+    letter-spacing: -0.19px;
+    line-height: 1.5;
+    color: var(--snow);
+    background-color: var(--page-ink);
+    /* Subtle 1px grid-wireframe motif — blueprint, carries no content */
+    background-image:
+      repeating-linear-gradient(to right, rgba(49,49,49,0.28) 0, rgba(49,49,49,0.28) 1px, transparent 1px, transparent 48px),
+      repeating-linear-gradient(to bottom, rgba(49,49,49,0.28) 0, rgba(49,49,49,0.28) 1px, transparent 1px, transparent 48px);
+    background-attachment: fixed;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    overflow-x: hidden;
+  }
+
+  .shell { max-width: 1200px; margin: 0 auto; padding: 0 24px; }
+  .column { max-width: 880px; }
+
+  /* Mono eyebrow */
+  .eyebrow {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 400;
+    letter-spacing: 0.9px;
+    text-transform: uppercase;
+    color: var(--cornflower);
+    margin: 0;
+  }
+  .eyebrow.muted { color: var(--fog); }
+
+  /* ===== Header ===== */
+  header {
+    padding: var(--s-6) 0 var(--s-4);
+    border-bottom: 1px solid var(--steel-border);
+    margin-bottom: var(--s-5);
+  }
+  header .eyebrow { margin-bottom: var(--s-2); }
+  h1 {
+    font-family: var(--font-ui);
+    font-weight: 600;
+    font-size: 40px;
+    letter-spacing: -0.84px;
+    line-height: 1.05;
+    margin: 0 0 12px;
+    color: var(--snow);
+  }
+  .framing {
+    color: var(--ash);
+    font-size: 16px;
+    letter-spacing: -0.19px;
+    max-width: 640px;
+    margin: 0;
+  }
+  .framing .hl { color: var(--snow); }
+
+  /* ===== Controls ===== */
+  .controls {
+    background: var(--card-carbon);
+    border: 1px solid var(--steel-border);
+    border-radius: 8px;
+    padding: var(--s-3);
+    display: flex;
+    flex-direction: column;
+    gap: var(--s-2);
+    margin-bottom: var(--s-4);
+  }
+  .field-label {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    letter-spacing: 0.9px;
+    text-transform: uppercase;
+    color: var(--fog);
+    display: block;
+    margin-bottom: 8px;
+  }
+  textarea {
+    width: 100%;
+    min-height: 84px;
+    resize: vertical;
+    background: var(--deep-coal);
+    color: var(--snow);
+    border: 1px solid var(--graphite);
+    border-radius: 8px;
+    padding: 12px 14px;
+    font-family: var(--font-ui);
+    font-size: 16px;
+    letter-spacing: -0.19px;
+    line-height: 1.5;
+  }
+  textarea::placeholder { color: var(--fog); }
+  textarea:focus,
+  select:focus { outline: none; border-color: var(--cornflower); }
+
+  .row { display: flex; gap: var(--s-2); flex-wrap: wrap; align-items: flex-end; }
+  .row .selgroup { flex: 1 1 180px; min-width: 150px; }
+  select {
+    width: 100%;
+    background: var(--deep-coal);
+    color: var(--snow);
+    border: 1px solid var(--graphite);
+    border-radius: 8px;
+    padding: 0 14px;
+    height: 44px;
+    font-family: var(--font-ui);
+    font-size: 14px;
+    letter-spacing: -0.17px;
+    cursor: pointer;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5L6 6.5L11 1.5' stroke='%23a7a7a7' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 14px center;
+    padding-right: 36px;
+  }
+  .btn-group { flex: 0 0 auto; }
+  /* Primary button — WHITE filled (never the accent). */
+  button#go {
+    background: var(--snow);
+    color: var(--page-ink);
+    border: none;
+    border-radius: 8px;
+    padding: 0 22px;
+    height: 44px;
+    min-height: 44px;
+    font-family: var(--font-ui);
+    font-weight: 500;
+    font-size: 14px;
+    letter-spacing: -0.17px;
+    cursor: pointer;
+    transition: opacity 0.12s ease;
+    white-space: nowrap;
+  }
+  button#go:hover { opacity: 0.88; }
+  button#go:active { opacity: 0.78; }
+  button#go:disabled { opacity: 0.45; cursor: default; }
+
+  /* ===== Meta strip ===== */
+  .meta-strip {
+    display: none;
+    flex-wrap: wrap;
+    gap: var(--s-1) var(--s-3);
+    align-items: center;
+    padding: 12px 0;
+    border-top: 1px solid var(--steel-border);
+    border-bottom: 1px solid var(--steel-border);
+    margin-bottom: var(--s-3);
+  }
+  .meta-strip.on { display: flex; }
+  .meta-item { display: flex; align-items: baseline; gap: 8px; }
+  .meta-item .lbl {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.9px;
+    text-transform: uppercase;
+    color: var(--fog);
+  }
+  .meta-item .val {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--ash);
+  }
+  .meta-item .val.accent { color: var(--cornflower); }
+  .meta-framing {
+    flex: 1 1 100%;
+    font-family: var(--font-ui);
+    font-size: 13px;
+    color: var(--fog);
+    letter-spacing: -0.16px;
+  }
+
+  /* ===== Offline / error banner ===== */
+  .banner {
+    display: none;
+    border: 1px solid var(--steel-border);
+    border-left: 2px solid var(--cornflower);
+    border-radius: 8px;
+    background: var(--deep-coal);
+    padding: 16px 20px;
+    margin-bottom: var(--s-3);
+  }
+  .banner.on { display: block; }
+  .banner .eyebrow { margin-bottom: 6px; }
+  .banner .msg { font-size: 14px; letter-spacing: -0.17px; color: var(--ash); margin: 0; }
+
+  /* ===== Result cards ===== */
+  #results { display: flex; flex-direction: column; gap: var(--s-2); }
+  .card {
+    background: var(--card-carbon);
+    border: 1px solid var(--steel-border);
+    border-radius: 8px;
+    padding: var(--s-3);
+  }
+  .card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--s-2); margin-bottom: var(--s-2); }
+  .cause {
+    font-family: var(--font-ui);
+    font-weight: 600;
+    font-size: 22px;
+    letter-spacing: -0.4px;
+    line-height: 1.2;
+    margin: 0;
+    color: var(--snow);
+    flex: 1 1 auto;
+  }
+  .tier-chip {
+    flex: 0 0 auto;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.7px;
+    text-transform: uppercase;
+    padding: 4px 9px;
+    border-radius: 4px;
+    border: 1px solid var(--graphite);
+    color: var(--ash);
+    white-space: nowrap;
+  }
+  .tier-chip.strong { border-color: var(--cornflower); color: var(--cornflower); }
+  .tier-chip.likely { border-color: var(--graphite); color: var(--ash); }
+  .tier-chip.weak { border-color: var(--steel-border); color: var(--fog); }
+
+  /* Confidence bar */
+  .conf-wrap { margin-bottom: var(--s-2); }
+  .conf-row { display: flex; align-items: center; justify-content: space-between; gap: var(--s-2); margin-bottom: 8px; }
+  .conf-tier {
+    font-family: var(--font-ui);
+    font-weight: 500;
+    font-size: 14px;
+    letter-spacing: -0.17px;
+    color: var(--snow);
+  }
+  .conf-receipt { font-family: var(--font-mono); font-size: 12px; color: var(--fog); }
+  .conf-track { height: 6px; border-radius: 4px; background: var(--deep-coal); border: 1px solid var(--steel-border); overflow: hidden; }
+  .conf-fill { height: 100%; background: var(--cornflower); border-radius: 4px 0 0 4px; }
+
+  /* Identity + facts */
+  .identity {
+    font-family: var(--font-ui);
+    font-size: 14px;
+    letter-spacing: -0.17px;
+    color: var(--ash);
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .identity .sep { color: var(--steel-border); }
+  .identity .model { font-family: var(--font-mono); font-size: 13px; color: var(--snow); }
+  .code-chip {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    letter-spacing: 0.5px;
+    padding: 3px 8px;
+    border-radius: 4px;
+    border: 1px solid var(--graphite);
+    color: var(--ash);
+  }
+  .onfile {
+    font-size: 14px;
+    letter-spacing: -0.17px;
+    color: var(--ash);
+    margin-bottom: var(--s-2);
+    padding-left: 12px;
+    border-left: 1px solid var(--steel-border);
+  }
+  .onfile .k { color: var(--fog); font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.6px; text-transform: uppercase; display: block; margin-bottom: 4px; }
+
+  /* Job facts — parts / labor / price */
+  .facts {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: var(--s-2);
+    padding: var(--s-2) 0;
+    border-top: 1px solid var(--steel-border);
+    border-bottom: 1px solid var(--steel-border);
+    margin-bottom: 12px;
+  }
+  .fact .k { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.6px; text-transform: uppercase; color: var(--fog); display: block; margin-bottom: 6px; }
+  .fact .v { font-family: var(--font-ui); font-size: 14px; letter-spacing: -0.17px; color: var(--snow); }
+  .fact .v.num { font-family: var(--font-mono); font-size: 18px; color: var(--snow); }
+  .fact .v.price { font-family: var(--font-mono); font-size: 18px; color: var(--cornflower); }
+
+  /* Citation */
+  .cite {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    letter-spacing: 0.4px;
+    color: var(--ash);
+  }
+  .cite .lead { color: var(--fog); }
+  .cite .hl { color: var(--cornflower); }
+
+  /* ===== States: first-run / empty ===== */
+  .state-panel {
+    display: none;
+    background: var(--deep-coal);
+    border: 1px solid var(--steel-border);
+    border-radius: 8px;
+    padding: var(--s-4);
+  }
+  .state-panel.on { display: block; }
+  .state-panel .eyebrow { margin-bottom: 12px; }
+  .state-panel h2 {
+    font-family: var(--font-ui);
+    font-weight: 600;
+    font-size: 20px;
+    letter-spacing: -0.3px;
+    margin: 0 0 10px;
+    color: var(--snow);
+  }
+  .state-panel p { color: var(--ash); font-size: 15px; letter-spacing: -0.18px; margin: 0 0 var(--s-3); max-width: 560px; }
+  .example-btn {
+    background: transparent;
+    color: var(--snow);
+    border: 1px solid var(--graphite);
+    border-radius: 8px;
+    padding: 0 18px;
+    height: 44px;
+    min-height: 44px;
+    font-family: var(--font-ui);
+    font-weight: 500;
+    font-size: 14px;
+    letter-spacing: -0.17px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    transition: border-color 0.12s ease;
+  }
+  .example-btn:hover { border-color: var(--cornflower); }
+  .example-btn .arrow { color: var(--cornflower); font-family: var(--font-mono); }
+  .example-btn .q { font-family: var(--font-mono); font-size: 13px; color: var(--ash); }
+
+  /* ===== Skeleton loading ===== */
+  #skeleton { display: none; flex-direction: column; gap: var(--s-2); }
+  #skeleton.on { display: flex; }
+  .sk-card { background: var(--card-carbon); border: 1px solid var(--steel-border); border-radius: 8px; padding: var(--s-3); }
+  .sk { border-radius: 4px; background: var(--steel-border); position: relative; overflow: hidden; }
+  .sk::after {
+    content: ""; position: absolute; inset: 0;
+    background: linear-gradient(90deg, transparent 0%, rgba(103,152,255,0.08) 40%, rgba(167,167,167,0.10) 50%, rgba(103,152,255,0.08) 60%, transparent 100%);
+    transform: translateX(-100%);
+    animation: shimmer 1.4s infinite;
+  }
+  @keyframes shimmer { 100% { transform: translateX(100%); } }
+  .sk-line { height: 14px; margin-bottom: 10px; }
+  .sk-spine { height: 24px; width: 62%; margin-bottom: 16px; }
+  .sk-id { height: 13px; width: 44%; margin-bottom: 20px; }
+  .sk-bar { height: 6px; width: 100%; margin-bottom: 20px; }
+  .sk-facts { display: grid; grid-template-columns: repeat(3,1fr); gap: var(--s-2); }
+  .sk-fact { height: 34px; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .sk::after { animation: none; }
+  }
+
+  footer {
+    padding: var(--s-5) 0 var(--s-6);
+    margin-top: var(--s-5);
+    border-top: 1px solid var(--steel-border);
+  }
+  footer .eyebrow { color: var(--fog); }
+
+  /* ===== Responsive ===== */
+  @media (max-width: 640px) {
+    .shell { padding: 0 16px; }
+    header { padding: var(--s-5) 0 var(--s-3); margin-bottom: var(--s-4); }
+    h1 { font-size: 30px; letter-spacing: -0.6px; }
+    .framing { font-size: 15px; }
+    .row { flex-direction: column; align-items: stretch; }
+    .row .selgroup { flex: 1 1 auto; }
+    .btn-group { width: 100%; }
+    button#go { width: 100%; }
+    .cause { font-size: 19px; }
+    .facts, .sk-facts { grid-template-columns: 1fr; gap: 12px; }
+    .facts { padding: var(--s-2) 0; }
+    .state-panel { padding: var(--s-3); }
+    .example-btn { width: 100%; justify-content: flex-start; }
+    .example-btn .q { display: none; }
+  }
 </style>
 </head>
 <body>
-<header>
-  <h1>CaseJog</h1>
-  <div class="framing">Your past cases, ranked — a recall aid, not a diagnosis. 100% local.</div>
-</header>
-<main>
-  <div class="controls">
-    <textarea id="symptom" placeholder="Type a new symptom, e.g. 'drum stuck, water not draining, E18'"></textarea>
-    <div class="row">
-      <select id="appliance_type">
-        <option value="">Any appliance</option>
-        <option>washing machine</option>
-        <option>fridge</option>
-        <option>microwave</option>
-        <option>small electronics</option>
-      </select>
-      <select id="brand">
-        <option value="">Any brand</option>
-        <option>Bosch</option><option>Samsung</option><option>LG</option>
-        <option>Whirlpool</option><option>Panasonic</option><option>Sharp</option>
-        <option>Dyson</option><option>Philips</option><option>DeLonghi</option><option>Anker</option>
-      </select>
-      <button id="go">Recall past cases</button>
+<div class="shell">
+  <header>
+    <p class="eyebrow">CASEJOG · REPAIR-BENCH RECALL</p>
+    <h1>Pull your past cases, ranked.</h1>
+    <div class="framing">Type a symptom off the bench and get the closest jobs you've already closed — <span class="hl">a recall aid, not a diagnosis</span>. Runs on open weights; on the bench it runs fully local.</div>
+  </header>
+
+  <main>
+    <div class="column">
+      <div class="controls">
+        <div>
+          <label class="field-label" for="symptom">Symptom off the bench</label>
+          <textarea id="symptom" placeholder="e.g. drum stuck, water not draining, E18"></textarea>
+        </div>
+        <div class="row">
+          <div class="selgroup">
+            <label class="field-label" for="appliance_type">Appliance</label>
+            <select id="appliance_type">
+              <option value="">Any appliance</option>
+              <option>washing machine</option>
+              <option>fridge</option>
+              <option>microwave</option>
+              <option>small electronics</option>
+            </select>
+          </div>
+          <div class="selgroup">
+            <label class="field-label" for="brand">Brand</label>
+            <select id="brand">
+              <option value="">Any brand</option>
+              <option>Bosch</option><option>Samsung</option><option>LG</option>
+              <option>Whirlpool</option><option>Panasonic</option><option>Sharp</option>
+              <option>Dyson</option><option>Philips</option><option>DeLonghi</option><option>Anker</option>
+            </select>
+          </div>
+          <div class="btn-group">
+            <label class="field-label" aria-hidden="true">&nbsp;</label>
+            <button id="go">Recall past cases</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="meta-strip" id="meta"></div>
+      <div class="banner" id="banner"></div>
+
+      <!-- Loading skeleton -->
+      <div id="skeleton">
+        <div class="sk-card">
+          <div class="sk sk-spine"></div><div class="sk sk-id"></div><div class="sk sk-bar"></div>
+          <div class="sk-facts"><div class="sk sk-fact"></div><div class="sk sk-fact"></div><div class="sk sk-fact"></div></div>
+        </div>
+        <div class="sk-card">
+          <div class="sk sk-spine"></div><div class="sk sk-id"></div><div class="sk sk-bar"></div>
+          <div class="sk-facts"><div class="sk sk-fact"></div><div class="sk sk-fact"></div><div class="sk sk-fact"></div></div>
+        </div>
+        <div class="sk-card">
+          <div class="sk sk-spine"></div><div class="sk sk-id"></div><div class="sk sk-bar"></div>
+          <div class="sk-facts"><div class="sk sk-fact"></div><div class="sk sk-fact"></div><div class="sk sk-fact"></div></div>
+        </div>
+      </div>
+
+      <!-- First-run / empty states -->
+      <div class="state-panel" id="firstrun">
+        <p class="eyebrow">EXAMPLE QUERY</p>
+        <h2>Start with a symptom, get ranked recalls.</h2>
+        <p>CaseJog searches your closed-job history and ranks the closest matches by root cause — with the parts, labor, price and source case on each. Try the example below, or type your own above.</p>
+        <button class="example-btn" id="example">
+          <span class="arrow">&rarr;</span>
+          <span>Run example</span>
+          <span class="q">door will not lock, wont start · microwave</span>
+        </button>
+      </div>
+
+      <div class="state-panel" id="noresults">
+        <p class="eyebrow muted">NO MATCH ON FILE</p>
+        <h2>No matching past cases.</h2>
+        <p>Nothing in your closed-job history lines up with that symptom under the current filters. Try broadening the wording, or clear the appliance / brand filter and search again.</p>
+      </div>
+
+      <div id="results"></div>
     </div>
-  </div>
-  <div class="meta" id="meta"></div>
-  <div class="note" id="note"></div>
-  <div class="summary" id="summary"></div>
-  <div id="results"></div>
-</main>
+  </main>
+
+  <footer>
+    <p class="eyebrow">LOCAL SEMANTIC MEMORY · OPEN WEIGHTS · HOSTED DEMO</p>
+  </footer>
+</div>
+
 <script>
 const $ = (id) => document.getElementById(id);
+
+function show(el, on) { el.classList.toggle("on", !!on); }
+
+function tierFor(c) {
+  // Prefer API confidence when present; otherwise map the score to a legible tier.
+  if (c.confidence === "strong") return { key: "strong", label: "Strong match" };
+  if (c.confidence === "weak") return { key: "weak", label: "Weak match" };
+  const s = Number(c.score);
+  if (isNaN(s)) return { key: "likely", label: "Possible match" };
+  if (s >= 0.80) return { key: "strong", label: "Strong match" };
+  if (s >= 0.60) return { key: "likely", label: "Likely match" };
+  return { key: "weak", label: "Weak match" };
+}
+
+function esc(v) {
+  return String(v == null ? "" : v)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function renderResults(data) {
+  const el = $("results");
+  el.innerHTML = "";
+  if (!data.results.length) { show($("noresults"), true); return; }
+  show($("noresults"), false);
+
+  for (const c of data.results) {
+    const tier = tierFor(c);
+    const score = Number(c.score);
+    const pct = isNaN(score) ? 0 : Math.max(4, Math.min(100, Math.round(score * 100)));
+    const parts = (c.parts || []).join(", ") || "—";
+    const confReceipt = (c.confidence_score != null)
+      ? ` · conf ${Number(c.confidence_score).toFixed(2)}` : "";
+    const citeId = c.citation ? c.citation.id : c.id;
+    const citeDate = c.citation ? c.citation.date : c.date;
+    const citePrice = c.citation ? c.citation.price : c.price;
+
+    el.insertAdjacentHTML("beforeend", `
+      <div class="card">
+        <div class="card-head">
+          <h3 class="cause">${esc(c.root_cause)}</h3>
+          <span class="tier-chip ${tier.key}">${esc(tier.label.split(" ")[0])}</span>
+        </div>
+
+        <div class="conf-wrap">
+          <div class="conf-row">
+            <span class="conf-tier">${esc(tier.label)}</span>
+            <span class="conf-receipt">match ${isNaN(score) ? "—" : score.toFixed(3)}${confReceipt}</span>
+          </div>
+          <div class="conf-track"><div class="conf-fill" style="width:${pct}%"></div></div>
+        </div>
+
+        <div class="identity">
+          <span>${esc(c.appliance_type || "—")}</span>
+          <span class="sep">/</span>
+          <span>${esc(c.brand || "—")}</span>
+          <span class="model">${esc(c.model || "")}</span>
+          <span class="code-chip">${esc(c.error_code || "NO CODE")}</span>
+        </div>
+
+        <div class="onfile">
+          <span class="k">Symptom on file</span>
+          ${esc(c.symptom_text || "—")}
+        </div>
+
+        <div class="facts">
+          <div class="fact"><span class="k">Parts</span><span class="v">${esc(parts)}</span></div>
+          <div class="fact"><span class="k">Labor</span><span class="v num">${esc(c.labor_minutes != null ? c.labor_minutes : "—")}<span style="font-size:12px;color:var(--fog)"> min</span></span></div>
+          <div class="fact"><span class="k">Price</span><span class="v price">$${esc(c.price != null ? c.price : "—")}</span></div>
+        </div>
+
+        <div class="cite">
+          <span class="lead">SOURCE CASE</span> <span class="hl">${esc(citeId)}</span> · ${esc(citeDate || "—")} · $${esc(citePrice != null ? citePrice : "—")}
+        </div>
+      </div>`);
+  }
+}
+
+function renderMeta(data) {
+  const strip = $("meta");
+  const strong = data.results.filter(c => {
+    if (c.confidence) return c.confidence === "strong";
+    return Number(c.score) >= 0.80;
+  }).length;
+  strip.innerHTML = `
+    <div class="meta-item"><span class="lbl">Engine</span><span class="val accent">${esc(data.engine)}</span></div>
+    <div class="meta-item"><span class="lbl">Latency</span><span class="val">${esc(data.latency_ms)} ms</span></div>
+    <div class="meta-item"><span class="lbl">Cases</span><span class="val">${esc(data.count)}</span></div>
+    <div class="meta-item"><span class="lbl">Strong</span><span class="val">${strong} / ${data.results.length}</span></div>
+    <div class="meta-framing">${esc(data.framing)}</div>
+  `;
+  show(strip, true);
+}
+
+function showBanner(eyebrow, msg) {
+  $("banner").innerHTML = `<p class="eyebrow">${esc(eyebrow)}</p><p class="msg">${esc(msg)}</p>`;
+  show($("banner"), true);
+}
+
 async function search() {
   const body = {
     symptom: $("symptom").value.trim(),
@@ -71,43 +626,63 @@ async function search() {
     brand: $("brand").value || null,
     k: 5,
   };
-  if (!body.symptom) { $("meta").textContent = "Type a symptom first."; return; }
-  $("meta").textContent = "Searching…";
-  $("note").textContent = ""; $("summary").textContent = "";
-  const r = await fetch("/api/search", {
-    method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(body)
-  });
-  const data = await r.json();
-  $("meta").textContent = `${data.framing}  ·  engine: ${data.engine}  ·  ${data.latency_ms} ms  ·  ${data.count} cases`;
-  $("note").textContent = data.note || "";
-  // optional Decider summary ("N strong matches") when the confidence gate is on
-  const strong = data.results.filter(c => c.confidence === "strong").length;
-  if (data.results.some(c => c.confidence)) {
-    $("summary").textContent = `${strong} strong match${strong===1?"":"es"} of ${data.results.length}`;
+  if (!body.symptom) {
+    show($("firstrun"), false);
+    show($("noresults"), false);
+    showBanner("INPUT NEEDED", "Type a symptom off the bench, then run the recall.");
+    $("symptom").focus();
+    return;
   }
-  const el = $("results"); el.innerHTML = "";
-  if (!data.results.length) { el.innerHTML = '<div class="empty">No matching past cases.</div>'; return; }
-  for (const c of data.results) {
-    const parts = (c.parts||[]).join(", ") || "—";
-    const score = (c.score!==undefined?c.score:c._score);
-    let badge = "";
-    if (c.confidence === "strong") badge = '<span class="badge strong">strong</span>';
-    else if (c.confidence === "weak") badge = '<span class="badge weak">weak</span>';
-    const conf = (c.confidence_score!==undefined && c.confidence_score!==null)
-      ? `<br><span style="font-size:11px">conf ${Number(c.confidence_score).toFixed(2)}</span>` : "";
-    el.insertAdjacentHTML("beforeend", `
-      <div class="card">
-        <span class="score">match ${Number(score).toFixed(3)}${conf}</span>
-        <p class="cause">${c.root_cause}${badge}</p>
-        <div class="kv">${c.appliance_type||""} · ${c.brand||""} ${c.model||""} · code ${c.error_code||"—"}</div>
-        <div class="kv">symptom on file: ${c.symptom_text||""}</div>
-        <div class="kv">parts: ${parts} · labor: ${c.labor_minutes||"—"} min · price: $${c.price||"—"}</div>
-        <div class="cite">source case ${c.citation?c.citation.id:c.id} · ${c.date||""} · $${c.citation?c.citation.price:c.price}</div>
-      </div>`);
+
+  // Enter loading state
+  show($("firstrun"), false);
+  show($("noresults"), false);
+  show($("banner"), false);
+  show($("meta"), false);
+  $("results").innerHTML = "";
+  show($("skeleton"), true);
+  $("go").disabled = true;
+  $("go").textContent = "Recalling…";
+
+  try {
+    const r = await fetch("/api/search", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    const data = await r.json();
+
+    show($("skeleton"), false);
+    renderMeta(data);
+    if (data.note) {
+      showBanner("OFFLINE FALLBACK", data.note);
+    }
+    renderResults(data);
+  } catch (err) {
+    show($("skeleton"), false);
+    show($("meta"), false);
+    showBanner("SERVICE UNREACHABLE", "Can't reach the recall service right now. Check the local server and try again. (" + err.message + ")");
+    show($("noresults"), false);
+  } finally {
+    $("go").disabled = false;
+    $("go").textContent = "Recall past cases";
   }
 }
+
 $("go").addEventListener("click", search);
-$("symptom").addEventListener("keydown", (e)=>{ if(e.key==="Enter"&&(e.metaKey||e.ctrlKey)) search(); });
+$("symptom").addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) search();
+});
+$("example").addEventListener("click", () => {
+  $("symptom").value = "door will not lock, wont start";
+  $("appliance_type").value = "microwave";
+  $("brand").value = "";
+  search();
+});
+
+// First-run state on load
+show($("firstrun"), true);
 </script>
 </body>
 </html>
