@@ -1,0 +1,27 @@
+services:
+  - type: web
+    name: casejog
+    runtime: python
+    plan: starter            # always-on (uses account credits); avoids free-tier cold starts
+    region: virginia         # near the Atlas M0 (AWS us-east-1)
+    buildCommand: ./build.sh
+    startCommand: uvicorn app:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.7"
+      - key: EMBED_MODEL
+        value: BAAI/bge-small-en-v1.5
+      - key: EMBED_DIM
+        value: "384"
+      - key: CASEJOG_DB
+        value: casejog
+      - key: CASEJOG_COLL
+        value: cases
+      # Atlas connection string — set as a SECRET in the Render dashboard.
+      # Never committed. sync:false keeps it out of this blueprint.
+      - key: MONGODB_URI
+        sync: false
+      # Where fastembed caches the ONNX model (warmed at build time).
+      - key: FASTEMBED_CACHE_PATH
+        value: /opt/render/project/.cache/fastembed
